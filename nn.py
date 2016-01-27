@@ -5,6 +5,32 @@ import numpy
 import scipy.optimize
 import itertools
 
+def create_training_dict(X, y):
+    """Create a dictionary for training samples.
+
+    Args:
+      X (numpy.ndarray): 2-D array of feature vectors (1 per row)
+      y (numpy.ndarray): labels for each feature vector
+
+    Returns:
+      A dictionary containing ...
+      X (numpy.ndarray): 2-D array of feature vectors (1 per row)
+      y (numpy.ndarray): labels for each feature vector
+      m (int): number of feature vectors (i.e. training examples)
+      n (int): number of features per vector
+      n_cat (int): number of categories (i.e. unique values in y)
+      y1hot (numpy.ndarray) 2-D array of one-hot vectors (1 per row)
+        for example if n_cat = 5, the label 3 -> [0, 0, 0, 1, 0]
+    """
+    m, n = X.shape
+    n_cat = len(numpy.unique(y))
+    y1hot = numpy.identity(n_cat)[y]
+    Xmean = X.mean()
+    Xstd = X.std()
+    Xnorm = (X - Xmean) / Xstd
+    return {'Xnorm': Xnorm, 'Xmean': Xmean, 'Xstd': Xstd, 'y': y, 'm': m,
+            'n': n, 'n_cat': n_cat, 'y1hot': y1hot}
+
 
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2,s3), ..."
@@ -34,9 +60,11 @@ def sigmoid_gradient(z):
     """
     return sigmoid(z) * (1.0 - sigmoid(z))
 
+
 def flatten_arrays(arrays):
     """Turn a list of 2-D weight arrays into a single 1-D weight array."""
     return numpy.concatenate([a.flatten() for a in arrays])
+
 
 def unflatten_array(flat_array, array_shapes):
     """Turn a single 1-D weight array into a list of 2-D weight arrays."""
@@ -64,17 +92,16 @@ def initialize_random_weights(layer_sizes):
     return weights
 
 
+def minimize(initial_weights, X, y1hot, lam=0.0, method='TNC', jac=True,
+             tol=1.0e-3, options={'disp': True, 'maxiter': 1000}):
 
-def minimize(initial_weights, X, yarr, weight_shapes, lam=0.0,
-             method='TNC', jac=True, tol=1.0e-3,
-             options={'disp': True, 'maxiter': 1000}):
-
+    weight_shapes = [w.shape for w in initial_weights]
     flat_weights = flatten_arrays(initial_weights)
 
     res = scipy.optimize.minimize(
         compute_cost_and_grad,
         flat_weights,
-        args=(X, yarr, weight_shapes, lam),
+        args=(X, y1hot, weight_shapes, lam),
         method=method,
         jac=jac,
         tol=tol,
@@ -85,7 +112,7 @@ def minimize(initial_weights, X, yarr, weight_shapes, lam=0.0,
 
 
 def compute_cost_and_grad(
-        flat_weights, X, yarr, weight_shapes, lam=0.0, cost_only=False):
+        flat_weights, X, y1hot, weight_shapes, lam=0.0, cost_only=False):
 
     # package flat weights into a list of arrays
     m = X.shape[0]
@@ -94,12 +121,14 @@ def compute_cost_and_grad(
     # feed forward
     aa, zz = feed_forward(X, weights)
 
-    # cost
+    # calculate raw cost
     h = aa[-1]
     J = -(
-        numpy.sum(yarr * numpy.log(h)) +
-        numpy.sum((1.0 - yarr) * numpy.log(1.0 - h))
+        numpy.sum(y1hot * numpy.log(h)) +
+        numpy.sum((1.0 - y1hot) * numpy.log(1.0 - h))
     ) / m
+
+    # add regularization
     for weight in weights:
         J += lam * numpy.sum(weight[:, 1:] * weight[:, 1:]) * 0.5 / m
 
@@ -107,29 +136,10 @@ def compute_cost_and_grad(
         return J
 
     # gradient - back prop
-    d3 = aa[-1] - yarr
-    d2 = (
-        d3.dot(weights[-1]) *
-        sigmoid_gradient(numpy.c_[numpy.ones(m), zz[-2]])
-    )
-    d2 = d2[:, 1:]
+    weights_grad_flat = flatten_arrays(
+        back_propogation(weights, aa, zz, y1hot, lam=lam))
 
-    D1 = d2.T.dot(aa[-3])
-    D2 = d3.T.dot(aa[-2])
-
-    Theta1_grad = D1 / m
-    Theta2_grad = D2 / m
-
-    # dont regularize the first column
-    Theta1_grad[:, 1:] += lam/m * weights[0][:, 1:]
-    Theta2_grad[:, 1:] += lam/m * weights[1][:, 1:]
-    Theta_grad = flatten_arrays([Theta1_grad, Theta2_grad])
-
-    return J, Theta_grad
-
-
-
-
+    return J, weights_grad_flat
 
 
 def feed_forward(X, weights):
@@ -166,7 +176,7 @@ def feed_forward(X, weights):
     return aa, zz
 
 
-def back_propogation(weights, aa, zz, yarr, lam=0.0):
+def back_propogation(weights, aa, zz, y1hot, lam=0.0):
     """Perform a back propogation step
 
     Args:
@@ -175,24 +185,23 @@ def back_propogation(weights, aa, zz, yarr, lam=0.0):
     Returns:
 
     """
-    gradients = []  # a gradient for each weight array
-    m = yarr.shape[0]
+    m = y1hot.shape[0]
 
-    d3 = aa[-1] - yarr   # (5000, 10) - no bias column
-    d2 = (
-        d3.dot(weights[-1]) *
-        sigmoid_gradient(numpy.c_[numpy.ones(m), zz[-2]])
+    d2 = aa[2] - y1hot
+    d1 = (
+        d2.dot(weights[1]) *
+        sigmoid_gradient(numpy.c_[numpy.ones(m), zz[1]])
     )
-    d2 = d2[:, 1:]
+    d1 = d1[:, 1:]
 
-    D1 = d2.T.dot(aa[0])
-    D2 = d3.T.dot(aa[1])
+    weight0_grad = d1.T.dot(aa[0])
+    weight1_grad = d2.T.dot(aa[1])
 
-    Theta1_grad = D1 / m
-    Theta2_grad = D2 / m
+    weight0_grad /= m
+    weight1_grad /= m
 
     # dont regularize the first column
-    Theta1_grad[:, 1:] += lam/m * weights[0][:, 1:]
-    Theta2_grad[:, 1:] += lam/m * weights[1][:, 1:]
+    weight0_grad[:, 1:] += lam/m * weights[0][:, 1:]
+    weight1_grad[:, 1:] += lam/m * weights[1][:, 1:]
 
-    return [Theta1_grad, Theta2_grad]
+    return [weight0_grad, weight1_grad]
