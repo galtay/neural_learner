@@ -1,4 +1,5 @@
-"""Neural Network Python Implementation."""
+"""Vary regularization parameter (lambda) and check against validation set"""
+
 import numpy
 import random
 import matplotlib.pyplot as plt
@@ -38,8 +39,8 @@ weight_shapes = [w.shape for w in random_weights]
 
 # make learning curve
 #====================================================================
-lam = 0.0
-m_samples = [(i+1)*1000 for i in range(50)]
+all_lambdas = [0.0, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
+im = 2000
 
 train_accs = []
 valid_accs = []
@@ -47,7 +48,7 @@ valid_accs = []
 train_Js = []
 valid_Js = []
 
-for im in m_samples:
+for lam in all_lambdas:
 
     # train
     res = nn.minimize(
@@ -102,47 +103,10 @@ for im in m_samples:
     print
 
 
-plt.plot(train_Js, lw=3.0, ls='--', color='blue', label='Jtrain')
-plt.plot(valid_Js, lw=3.0, ls='-', color='red', label='Jcv')
+plt.semilogx(all_lambdas, train_Js,
+             lw=3.0, ls='--', color='blue', label='Jtrain')
+plt.semilogx(all_lambdas, valid_Js,
+             lw=3.0, ls='-', color='red', label='Jcv')
+plt.xlabel('lambda')
+plt.ylabel('J')
 plt.legend(loc='best')
-
-sys.exit(1)
-
-
-lamvals = [0.0, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
-accuracies = []
-ypredicts = []
-for lam in lamvals:
-
-    # train
-    res = nn.minimize(random_weights, Xtrain, y1hot, weight_shapes, lam=lam)
-    trained_weights = nn.unflatten_array(res.x, weight_shapes)
-
-    # accuracy for validation set
-    aa, zz = nn.feed_forward(Xvalid, trained_weights)
-    h = aa[-1]
-    ypredict = numpy.argmax(h, axis=1)
-    accuracy = (yvalid == ypredict).astype(numpy.float).mean()
-
-    ypredicts.append(ypredict)
-    accuracies.append(accuracy)
-
-    print
-    print 'Validation Set Accuracy (lambda={}): {}'.format(lam, accuracy)
-    print
-
-sys.exit(1)
-
-
-
-
-
-
-plt.ion()
-for ishow in range(10):
-    i = random.randint(0, ytest.size-1)
-    print 'using image {}'.format(i)
-    print 'actual: {}, prediction: {}'.format(ytest[i], y_predict[i])
-    plt.imshow(Xtest[i,:].reshape(28,28))
-    go_again = raw_input('press enter to continue ... ')
-plt.ioff()
