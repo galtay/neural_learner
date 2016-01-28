@@ -6,7 +6,9 @@ import scipy.optimize
 import itertools
 
 def create_training_dict(X, y):
-    """Create a dictionary for training samples.
+    """Take a set of input features and their labels and package them
+    along with some useful quantities into a dictionary.  This could
+    be a training, validation, or test set.
 
     Args:
       X (numpy.ndarray): 2-D array of feature vectors (1 per row)
@@ -44,6 +46,7 @@ def sigmoid(z):
 
     Args:
       z (numpy.ndarray): argument for sigmoid function
+
     Returns:
       g (numpy.ndarray): sigmoid function evaluated element-wise
     """
@@ -51,10 +54,11 @@ def sigmoid(z):
 
 
 def sigmoid_gradient(z):
-    """Return element-wise d sigmoid / dz
+    """Return element-wise sigmoid gradient evaluated at z
 
     Args:
       z (numpy.ndarray): argument for sigmoid function
+
     Returns:
       g (numpy.ndarray): sigmoid function evaluated element-wise
     """
@@ -62,12 +66,27 @@ def sigmoid_gradient(z):
 
 
 def flatten_arrays(arrays):
-    """Turn a list of 2-D weight arrays into a single 1-D weight array."""
+    """Turn a list of 2-D arrays into a single 1-D array.
+
+    Args:
+      arrays (``list`` of numpy.ndarray): a list of 2-D arrays
+
+    Returns:
+      (numpy.ndarray): a flattened 1-D array
+    """
     return numpy.concatenate([a.flatten() for a in arrays])
 
 
 def unflatten_array(flat_array, array_shapes):
-    """Turn a single 1-D weight array into a list of 2-D weight arrays."""
+    """Turn a single 1-D array into a list of 2-D arrays.
+
+    Args:
+      flat_array (numpy.ndarray): a flattened 1-D array
+      array_shapes (``list`` of ``tuple``): 2-D array shapes
+
+    Returns:
+      arrays (``list`` of numpy.ndarray): a list of 2-D arrays
+    """
     i = 0
     weight_arrays = []
     for shape in array_shapes:
@@ -78,10 +97,10 @@ def unflatten_array(flat_array, array_shapes):
 
 
 def initialize_random_weights(layer_sizes):
-    """Initialize weight arrays to random values.
+    """Initialize weight arrays to random values.  We use the normalized
+    initialization of Glorot and Bengio (2010).
 
-    Loop over adjacent layer sizes and calculate the shape of the
-    weight array that goes between them and its initial values.
+    https://scholar.google.com/scholar?cluster=17889055433985220047&hl=en&as_sdt=0,22
     """
     weights = []
     for si, sj in pairwise(layer_sizes):
@@ -93,11 +112,27 @@ def initialize_random_weights(layer_sizes):
 
 
 def minimize(initial_weights, X, y1hot, lam=0.0, method='TNC', jac=True,
-             tol=1.0e-3, options={'disp': True, 'maxiter': 1000}):
+             tol=1.0e-3, options={'disp': True, 'maxiter': 2000}):
+
+    """Calculate values of weights that minimize the cost function.
+
+    Args:
+      initial_weights (``list`` of numpy.ndarray): weights between each layer
+      X (numpy.ndarray): 2-D array of feature vectors (1 per row)
+      y1hot (numpy.ndarray): 2-D array of one-hot vectors (1 per row)
+      lam (``float``): regularization parameter
+      method (``str``): minimization method (see scipy.optimize.minimize docs)
+      jac (``bool`` or ``callable``): gradient provided? (see
+        scipy.optimize.minimize docs)
+      tol (``float``): stopping criterion (see scipy.optimize.minimize docs)
+      options (``dict``): method specific (see scipy.optimize.minimize docs)
+
+    Returns:
+      res (``OptimizeResult``): (see scipy.optimize.minimize docs)
+    """
 
     weight_shapes = [w.shape for w in initial_weights]
     flat_weights = flatten_arrays(initial_weights)
-
     res = scipy.optimize.minimize(
         compute_cost_and_grad,
         flat_weights,
@@ -107,16 +142,29 @@ def minimize(initial_weights, X, y1hot, lam=0.0, method='TNC', jac=True,
         tol=tol,
         options=options,
     )
-
     return res
 
 
 def compute_cost_and_grad(
-        flat_weights, X, y1hot, weight_shapes, lam=0.0, cost_only=False):
+        weights_flat, X, y1hot, weight_shapes, lam=0.0, cost_only=False):
+    """Calculate cost function and its gradient with respect to weights.
+
+    Args:
+      weights_flat (numpy.ndarray): a flattened 1-D weight array
+      X (numpy.ndarray): 2-D array of feature vectors (1 per row)
+      y1hot (numpy.ndarray) 2-D array of one-hot vectors (1 per row)
+      weight_shapes (``list`` of ``tuple``): 2-D array shapes
+      lam (``float``): regularization parameter
+      cost_only (``boolean``): if True return cost without gradient
+
+    Returns:
+      J (``float``): Cost with current weights
+      weights_grad_flat (numpy.ndarray): d_J/d_weight
+    """
 
     # package flat weights into a list of arrays
     m = X.shape[0]
-    weights = unflatten_array(flat_weights, weight_shapes)
+    weights = unflatten_array(weights_flat, weight_shapes)
 
     # feed forward
     aa, zz = feed_forward(X, weights)
@@ -148,11 +196,12 @@ def feed_forward(X, weights):
     variables will have the bias column included.
 
     Args:
-      X (numpy.ndarray): feature matrix (m X n)
+      X (numpy.ndarray): 2-D array of feature vectors (1 per row)
       weights (``list`` of numpy.ndarray): weights between each layer
+
     Returns:
       aa (``list`` of numpy.ndarray): activation of nodes for
-        each layer.  The last item in the list is the hypothesis
+        each layer.  The last item in the list is the hypothesis.
       zz (``list`` of numpy.ndarray): input into nodes for each layer.
     """
     aa = []
@@ -180,10 +229,15 @@ def back_propogation(weights, aa, zz, y1hot, lam=0.0):
     """Perform a back propogation step
 
     Args:
-      aa (``list`` of numpy.ndarray): activation of output nodes for
-        each layer.  The last item in the list is the hypothesis
-    Returns:
+      weights (``list`` of numpy.ndarray): weights between each layer
+      aa (``list`` of numpy.ndarray): activation of nodes for
+        each layer.  The last item in the list is the hypothesis.
+      zz (``list`` of numpy.ndarray): input into nodes for each layer.
+      y1hot (numpy.ndarray) 2-D array of one-hot vectors (1 per row)
+      lam (``float``): regularization parameter
 
+    Returns:
+      weights_grad (``list`` of numpy.ndarray): d_J/d_weight
     """
     weights_grad = []
     m = y1hot.shape[0]
