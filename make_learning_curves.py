@@ -48,11 +48,10 @@ layer_sizes = [n_input_nodes, n_hidden_nodes, n_output_nodes]
 random_weights = nn.initialize_random_weights(layer_sizes)
 weight_shapes = [w.shape for w in random_weights]
 
-
 # make learning curve
 #====================================================================
 lam = 0.0
-m_samples = [(i+1)*5000 for i in range(10)]
+m_samples = [(i+1)*5000 for i in range(2)]
 
 train_accs = []
 valid_accs = []

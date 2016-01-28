@@ -185,23 +185,33 @@ def back_propogation(weights, aa, zz, y1hot, lam=0.0):
     Returns:
 
     """
+    weights_grad = []
     m = y1hot.shape[0]
+    n_layers = len(weights) + 1
 
-    d2 = aa[2] - y1hot
-    d1 = (
-        d2.dot(weights[1]) *
-        sigmoid_gradient(numpy.c_[numpy.ones(m), zz[1]])
-    )
-    d1 = d1[:, 1:]
+    di_plus_1 = aa[-1] - y1hot
+    i = n_layers - 2
+    while i > 0:
+        ones_col = numpy.ones(zz[i].shape[0])
+        di = (
+            di_plus_1.dot(weights[i]) *
+            sigmoid_gradient(numpy.c_[ones_col, zz[i]])
+        )
+        di = di[:, 1:]
+        weights_grad.append(di_plus_1.T.dot(aa[i]))
+        i -= 1
+        di_plus_1 = di.copy()
 
-    weight0_grad = d1.T.dot(aa[0])
-    weight1_grad = d2.T.dot(aa[1])
+    weights_grad.append(di.T.dot(aa[0]))
 
-    weight0_grad /= m
-    weight1_grad /= m
+    # we built it backwards
+    weights_grad.reverse()
 
-    # dont regularize the first column
-    weight0_grad[:, 1:] += lam/m * weights[0][:, 1:]
-    weight1_grad[:, 1:] += lam/m * weights[1][:, 1:]
+    # normalize by m
+    weights_grad = [wg/m for wg in weights_grad]
 
-    return [weight0_grad, weight1_grad]
+    # add regularization (skip first columns)
+    for i in range(n_layers-1):
+        weights_grad[i][:, 1:] += lam/m * weights[i][:, 1:]
+
+    return weights_grad
