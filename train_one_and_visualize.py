@@ -2,29 +2,60 @@
 import numpy
 import random
 import matplotlib.pyplot as plt
+import scipy.misc
 import nn
+
+
+NPIX1D = 18
 
 # load training, validatin, and test data
 # train: m=50000 images of n=28x28=784 pixels each
 # valid: m=10000 images of n=28x28=784 pixels each
 # test: m=10000 images of n=28x28=784 pixels each
 # each image (and label) is a digit in the range 0-9
+# we rescale the images to NPIX1D x NPIX1D
 #====================================================================
+print 'reading and rescaling data ...'
+
 mnist_data = numpy.load('data/mnist_uint8_uint8.npz')
 
-train = nn.create_training_dict(
-    mnist_data['train_features'], mnist_data['train_labels'])
+Xtrain = mnist_data['train_features']
+Xscaled = numpy.zeros((Xtrain.shape[0], NPIX1D*NPIX1D))
+orig_npix = int(numpy.sqrt(Xtrain.shape[1]))
+for i in range(Xtrain.shape[0]):
+    img = Xtrain[i,:].reshape((orig_npix, orig_npix))
+    img_scaled = scipy.misc.imresize(img, (NPIX1D, NPIX1D))
+    Xscaled[i,:] = img_scaled.reshape((NPIX1D*NPIX1D))
+train = nn.create_training_dict(Xscaled, mnist_data['train_labels'])
 
-valid = nn.create_training_dict(
-    mnist_data['valid_features'], mnist_data['valid_labels'])
 
-test = nn.create_training_dict(
-    mnist_data['test_features'], mnist_data['test_labels'])
+Xtrain = mnist_data['valid_features']
+Xscaled = numpy.zeros((Xtrain.shape[0], NPIX1D*NPIX1D))
+orig_npix = int(numpy.sqrt(Xtrain.shape[1]))
+for i in range(Xtrain.shape[0]):
+    img = Xtrain[i,:].reshape((orig_npix, orig_npix))
+    img_scaled = scipy.misc.imresize(img, (NPIX1D, NPIX1D))
+    Xscaled[i,:] = img_scaled.reshape((NPIX1D*NPIX1D))
+valid = nn.create_training_dict(Xscaled, mnist_data['valid_labels'])
+
+
+Xtrain = mnist_data['test_features']
+Xscaled = numpy.zeros((Xtrain.shape[0], NPIX1D*NPIX1D))
+orig_npix = int(numpy.sqrt(Xtrain.shape[1]))
+for i in range(Xtrain.shape[0]):
+    img = Xtrain[i,:].reshape((orig_npix, orig_npix))
+    img_scaled = scipy.misc.imresize(img, (NPIX1D, NPIX1D))
+    Xscaled[i,:] = img_scaled.reshape((NPIX1D*NPIX1D))
+test = nn.create_training_dict(Xscaled, mnist_data['test_labels'])
+
+print 'done'
+
+
 
 
 # hard code layer sizes and initialize random weights
 #====================================================================
-n_input_nodes = 784  # pixels in image
+n_input_nodes = NPIX1D * NPIX1D  # pixels in image
 n_hidden_nodes = 25  # variable
 n_output_nodes = 10  # number of labels
 layer_sizes = [n_input_nodes, n_hidden_nodes, n_output_nodes]
@@ -91,10 +122,10 @@ h = aa[-1]
 y_predict = numpy.argmax(h, axis=1)
 
 plt.ion()
-for ishow in range(10):
+for ishow in range(100):
     i = random.randint(0, valid['m'] - 1)
     print 'using image {}'.format(i)
     print 'actual: {}, prediction: {}'.format(valid['y'][i], y_predict[i])
-    plt.imshow(valid['Xnorm'][i,:].reshape(28,28))
+    plt.imshow(valid['Xnorm'][i,:].reshape(NPIX1D,NPIX1D))
     go_again = raw_input('press enter to continue ... ')
 plt.ioff()
